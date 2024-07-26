@@ -26,11 +26,12 @@ def display_annotations(image, annotations):
             cv2.putText(display_image, f'{idx}', (x_min, y_max + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)  # Display index
     return display_image
 
-def select_polygon(image, display_image):
+def select_polygon(image, display_image, percentage):
     points = []
     img = display_image
     def draw_polygon(event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
+            print((x,y))
             points.append((x, y))
             cv2.circle(img, (x, y), 5, (0, 0, 255), -1)
             if len(points) > 1:
@@ -55,24 +56,40 @@ def select_polygon(image, display_image):
         
 
     cv2.destroyWindow("Select Polygon")
+    
+    
+    #convert our point back to the original size x y pos
+    for i, x in enumerate(points):
+        points[i] = (int(x[0]/percentage), int( x[1]/ percentage))
+    
     return points
-
 
 def manual_labeling(image, initial_detections):
     annotations = initial_detections.copy()  # Start with the initial detections
+    def nothing(x):
+        pass
+
+    width = image.shape[1] # width of image
+    height = image.shape[0] # height of image
+    cv2.namedWindow("Manual Labeling") # create a window for display 
+    cv2.moveWindow("Manual Labeling", 0, 0) # move window to start from top left angle
+    cv2.createTrackbar("Window_size", "Manual Labeling", 65, 100, nothing) # create a Trackbar for controling window size intial percentage is 65%
+
     while True:
-        # Display current annotations with indexes
-        display_image = display_annotations(image, annotations)
-        #display_image_r = cv2.resize(display_image, (960, 540))
-        #image_r = cv2.resize(image, (960,540))
-        cv2.imshow("Manual Labeling", display_image)
+        p = cv2.getTrackbarPos("Window_size", "Manual Labeling")/100 
+        cv2.resizeWindow("Manual Labeling", int(p *width), int(p *height))
+        display_image = display_annotations(image, annotations) # Display current annotations with indexes
+        display_image_r = cv2.resize(display_image, (int(p *width), int(p *height))) #resize our image for display
+        image_r = cv2.resize(image, (int(p *width),int(p *height))) #resize our un annotated image for display
+    
+        cv2.imshow("Manual Labeling", display_image_r) 
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord("a"):  # Add a new bounding polygon
             print("Adding new bounding polygon...")
-            image_copy = image.copy()
-            display_image_copy = display_image.copy()
-            points = select_polygon(image_copy, display_image_copy)
+            image_copy = image_r.copy()
+            display_image_copy = display_image_r.copy()
+            points = select_polygon(image_copy, display_image_copy, p)
             if len(points) < 3:
                 print("A polygon must have at least 3 points.")
                 continue
