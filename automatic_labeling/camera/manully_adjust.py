@@ -26,40 +26,53 @@ def display_annotations(image, annotations):
             cv2.putText(display_image, f'{idx}', (x_min, y_max + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)  # Display index
     return display_image
 
-def select_polygon(image):
+def select_polygon(image, display_image):
     points = []
+    img = display_image
     def draw_polygon(event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             points.append((x, y))
-            cv2.circle(image, (x, y), 5, (0, 0, 255), -1)
+            cv2.circle(img, (x, y), 5, (0, 0, 255), -1)
             if len(points) > 1:
-                cv2.line(image, points[-2], points[-1], (0, 255, 0), 2)
-            cv2.imshow("Select Polygon", image)
+                cv2.line(img, points[-2], points[-1], (0, 255, 0), 2)
+            cv2.imshow("Select Polygon", img)
 
     cv2.namedWindow("Select Polygon")
     cv2.setMouseCallback("Select Polygon", draw_polygon)
 
+    
+    cv2.imshow("Select Polygon", img)
     while True:
-        cv2.imshow("Select Polygon", image)
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):  # Press 'q' to confirm the polygon
             break
+        elif key == ord("s"):
+            img = display_image
+            cv2.imshow("Select Polygon", img)
+        elif key == ord("n"):
+            img = image
+            cv2.imshow("Select Polygon", img)
+        
 
     cv2.destroyWindow("Select Polygon")
     return points
+
 
 def manual_labeling(image, initial_detections):
     annotations = initial_detections.copy()  # Start with the initial detections
     while True:
         # Display current annotations with indexes
         display_image = display_annotations(image, annotations)
+        #display_image_r = cv2.resize(display_image, (960, 540))
+        #image_r = cv2.resize(image, (960,540))
         cv2.imshow("Manual Labeling", display_image)
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord("a"):  # Add a new bounding polygon
             print("Adding new bounding polygon...")
             image_copy = image.copy()
-            points = select_polygon(image_copy)
+            display_image_copy = display_image.copy()
+            points = select_polygon(image_copy, display_image_copy)
             if len(points) < 3:
                 print("A polygon must have at least 3 points.")
                 continue
@@ -119,8 +132,8 @@ def manual_labeling(image, initial_detections):
     return annotations, image
 
 def main():
-    base_json_folder = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/json_file/'
-    base_labeled_image_save_folder = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/label_file/'
+    base_json_folder = 'C:/data/json_file/'
+    base_labeled_image_save_folder = 'C:/data/label_file/'
 
     # Iterate through timestamp folders
     for timestamp_folder in os.listdir(base_json_folder):

@@ -14,13 +14,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # 摄像头的 RTSP URLs
 urls = [
     "rtsp://admin:wuhan027@172.16.40.23:554/Streaming/Channels/101",
-    "rtsp://admin:wuhan027@172.16.40.24:554/Streaming/Channels/101"
+    "rtsp://admin:wuhan027@172.16.40.24:554/Streaming/Channels/101",
+    "rtsp://admin:wuhan027@172.16.40.25:554/Streaming/Channels/101",
 ]
 
 # 主输出目录
-output_base_dir = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/pic_file/'  # Update path to your folder
-json_save_base_folder = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/json_file/'  # Update path to save JSON files
-labeled_image_save_base_folder = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/label_file/'  # Update path to save labeled images
+output_base_dir = 'C:/data/pic_file/'  # Update path to your folder
+json_save_base_folder = 'C:/data/json_file/'  # Update path to save JSON files
+labeled_image_save_base_folder = 'C:/data/label_file/'  # Update path to save labeled images
 
 # 创建带有时间戳的子目录
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -135,7 +136,7 @@ def capture_frames(url, initial_frame_num, model):
 
 
 # Load the YOLOv5 model once
-model_path = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/model/best_OEM.pt'  # Update path to your model
+model_path = 'C:/Users/ychen/Desktop/automatic_labeling/automatic_labeling/model/best_OEM.pt'  # Update path to your model
 model = load_yolo_model(model_path)
 
 # 创建并启动线程
