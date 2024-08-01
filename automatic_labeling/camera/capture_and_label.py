@@ -5,6 +5,7 @@ import logging
 import time
 import torch
 import json
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 
@@ -14,29 +15,33 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # 摄像头的 RTSP URLs
 urls = [
     "rtsp://admin:wuhan027@172.16.40.23:554/Streaming/Channels/101",
-    "rtsp://admin:wuhan027@172.16.40.24:554/Streaming/Channels/101"
+    "rtsp://admin:wuhan027@172.16.40.24:554/Streaming/Channels/101",
+    "rtsp://admin:wuhan027@172.16.40.25:554/Streaming/Channels/101",
 ]
 
 # 主输出目录
-output_base_dir = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/pic_file/'  # Update path to your folder
-json_save_base_folder = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/json_file/'  # Update path to save JSON files
-labeled_image_save_base_folder = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/camera/captured/label_file/'  # Update path to save labeled images
+base_dir = r'C:\automatic_labeling\automatic_labeling\data'
 
-# 创建带有时间戳的子目录
+# Create timestamped directory
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-output_base_dir = os.path.join(output_base_dir, timestamp)
-json_save_folder = os.path.join(json_save_base_folder, timestamp)
-labeled_image_save_folder = os.path.join(labeled_image_save_base_folder, timestamp)
+timestamp_dir = os.path.join(base_dir, timestamp)
 
-# 创建主输出目录（带时间戳）
-os.makedirs(output_base_dir, exist_ok=True)
-os.makedirs(json_save_folder, exist_ok=True)
-os.makedirs(labeled_image_save_folder, exist_ok=True)
+# Create camera-specific folders
+camera_folders = {
+    "172.16.40.23:554": "camera_23",
+    "172.16.40.24:554": "camera_24",
+    "172.16.40.25:554": "camera_25"
+}
 
+# Create directories
+for camera_ip, camera_folder in camera_folders.items():
+    camera_dir = os.path.join(timestamp_dir, camera_folder)
+    os.makedirs(os.path.join(camera_dir, 'json_file'), exist_ok=True)
+    os.makedirs(os.path.join(camera_dir, 'pic_file'), exist_ok=True)
+    os.makedirs(os.path.join(camera_dir, 'label_file'), exist_ok=True)
 
 def load_yolo_model(model_path):
     return torch.hub.load('ultralytics/yolov5', 'custom', path=model_path)
-
 
 def perform_inference(model, image):
     with torch.amp.autocast('cuda'):
@@ -46,33 +51,27 @@ def perform_inference(model, image):
         x_min, y_min, x_max, y_max = map(int, box)
         conf = float(conf)
         cls = int(cls)
-        label = model.names[cls]  # Get the class name
+        label = model.names[cls]
+        box = [
+            [x_min, y_min],
+            [x_max, y_min],
+            [x_max, y_max],
+            [x_min, y_max]
+        ]
         detections.append({
-            'box': [x_min, y_min, x_max, y_max],
-            'confidence': conf,
-            'class': label
+            'label': label,
+            'box': box,
+            'confidence': conf
         })
     return detections
 
-
-def create_output_dirs(url):
-    """Create directories based on the URL inside the main timestamped directory."""
-    # 使用URL的部分作为文件夹名称
-    url_identifier = url.split("//")[1].replace(":", "_").replace("/", "_")
-
-    pic_output_dir = os.path.join(output_base_dir, url_identifier)
-    json_output_dir = os.path.join(json_save_folder, url_identifier)
-    labeled_image_output_dir = os.path.join(labeled_image_save_folder, url_identifier)
-
-    os.makedirs(pic_output_dir, exist_ok=True)
-    os.makedirs(json_output_dir, exist_ok=True)
-    os.makedirs(labeled_image_output_dir, exist_ok=True)
-
-    return pic_output_dir, json_output_dir, labeled_image_output_dir
-
-
 def capture_frames(url, initial_frame_num, model):
-    pic_output_dir, json_output_dir, labeled_image_output_dir = create_output_dirs(url)
+    camera_ip = url.split("@")[1].split("/")[0]
+    camera_folder = camera_folders[camera_ip]
+    pic_output_dir = os.path.join(timestamp_dir, camera_folder, 'pic_file')
+    json_output_dir = os.path.join(timestamp_dir, camera_folder, 'json_file')
+    labeled_image_output_dir = os.path.join(timestamp_dir, camera_folder, 'label_file')
+
     cap = cv2.VideoCapture(url)
     frame_num = initial_frame_num
     retry_attempts = 5
@@ -105,8 +104,20 @@ def capture_frames(url, initial_frame_num, model):
 
                 # Save initial inference results to JSON
                 output_json = {
-                    'image_path': filepath,
-                    'detections': initial_detections
+                    'version': "5.5.0",
+                    'flags': {},
+                    'shapes': [{
+                        'label': det['label'],
+                        'points': det['box'],
+                        'group_id': None,
+                        'description': "",
+                        'shape_type': "polygon",
+                        'flags': {}
+                    } for det in initial_detections],
+                    'imagePath': filename,
+                    'imageData': None,
+                    'imageHeight': frame.shape[0],
+                    'imageWidth': frame.shape[1]
                 }
                 json_output_path = os.path.join(json_output_dir, Path(filename).stem + '_detections.json')
                 with open(json_output_path, 'w') as f:
@@ -115,12 +126,11 @@ def capture_frames(url, initial_frame_num, model):
                 # Save labeled image (without manual adjustments)
                 labeled_image_path = os.path.join(labeled_image_output_dir, Path(filename).stem + '_labeled.jpg')
                 for det in initial_detections:
-                    x_min, y_min, x_max, y_max = det['box']
-                    label = det['class']
+                    points = det['box']
+                    label = det['label']
                     conf = det['confidence']
-                    cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-                    cv2.putText(frame, f'{label} {conf:.2f}', (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
-                                (36, 255, 12), 2)
+                    cv2.polylines(frame, [np.array(points, np.int32).reshape((-1, 1, 2))], isClosed=True, color=(0, 255, 0), thickness=2)
+                    cv2.putText(frame, f'{label} {conf:.2f}', (points[0][0], points[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
                 cv2.imwrite(labeled_image_path, frame)
 
                 logging.info(f"Detections saved to {json_output_path}")
@@ -133,9 +143,8 @@ def capture_frames(url, initial_frame_num, model):
         cap.release()
         logging.info(f"Released video capture for {url}")
 
-
 # Load the YOLOv5 model once
-model_path = 'C:/Users/nicole6927/Desktop/Programs/automatic_labeling/model/best_OEM.pt'  # Update path to your model
+model_path = r"C:\automatic_labeling\automatic_labeling\model\best_OEM.pt"  # Update path to your model
 model = load_yolo_model(model_path)
 
 # 创建并启动线程
